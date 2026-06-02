@@ -44,28 +44,38 @@ const LoginPage = () => {
 
   // 1. Initial Login Trigger Mutation
   const { mutate: loginMutation, isPending, error } = useMutation({
-  mutationFn: login,
-  onSuccess: async (data) => { // 🚀 Added async here
-    if (data?.step === "REQUIRE_OTP") {
-      setTargetUserId(data.userId);
-      setStepContext("login");
-      setRequireOtpStep(true);
-    } else {
-      // 🚀 THE FIX: Await the query invalidation so the app state updates BEFORE redirecting
+    mutationFn: login,
+    onSuccess: async (data) => { 
+      if (data?.step === "REQUIRE_OTP") {
+        setTargetUserId(data.userId);
+        setStepContext("login");
+        setRequireOtpStep(true);
+      } else {
+        // ✅ STRIP TOKEN FROM SUCCESSFUL FAST-PASS RESPONSES
+        if (data?.token) {
+          localStorage.setItem("token", data.token);
+        }
+        
+        // 🚀 THE FIX: Await the query invalidation so the app state updates BEFORE redirecting
+        await queryClient.invalidateQueries({ queryKey: ["authUser"] });
+        navigate("/");
+      }
+    }
+  });
+
+  // 2. 🔢 Login 6-Digit OTP Verification Mutation
+  const { mutate: verifyOtpMutation, isPending: isVerifyingOtp, error: otpError } = useMutation({
+    mutationFn: (otpCode) => verifyOTP({ userId: targetUserId, otp: otpCode }),
+    onSuccess: async (data) => { 
+      // ✅ STRIP TOKEN FROM SUCCESSFUL OTP LOGIN RESPONSES
+      if (data?.token) {
+        localStorage.setItem("token", data.token);
+      }
+
       await queryClient.invalidateQueries({ queryKey: ["authUser"] });
       navigate("/");
     }
-  }
-});
-
-// 2. 🔢 Login 6-Digit OTP Verification Mutation
-const { mutate: verifyOtpMutation, isPending: isVerifyingOtp, error: otpError } = useMutation({
-  mutationFn: (otpCode) => verifyOTP({ userId: targetUserId, otp: otpCode }),
-  onSuccess: async () => { // 🚀 Added async here
-    await queryClient.invalidateQueries({ queryKey: ["authUser"] });
-    navigate("/");
-  }
-});
+  });
 
   // 3. ✉️ Forgot Password: Send OTP Code Mutation
   const { mutate: sendRecoveryOtpMutation, isPending: isSendingRecoveryOtp } = useMutation({
